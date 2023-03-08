@@ -1,7 +1,7 @@
 use crate::model::Text;
 use crate::parser::ParseFeedResult;
 use crate::xml::Element;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, TimeZone};
 use regex::{Captures, Regex};
 use std::error::Error;
 use std::io::BufRead;
@@ -122,11 +122,16 @@ pub(crate) fn timestamp_rfc2822_lenient(original: &str) -> Option<DateTime<Utc>>
     }
 
     // Now try RFC-1123, because hey...its the internet. Why follow standards?
-    let mut maybe_rfc1123 = cleaned;
+    let mut maybe_rfc1123 = cleaned.clone();
     for (regex, replacement) in RFC1123_FIXES.iter() {
         maybe_rfc1123 = regex.replace(&maybe_rfc1123, *replacement).to_string();
     }
     if let Ok(ts) = DateTime::parse_from_str(&maybe_rfc1123, RFC1123_FORMAT_STR).map(|t| t.with_timezone(&Utc)) {
+        return Some(ts);
+    }
+
+    const FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+    if let Ok(ts) = Utc.datetime_from_str(&cleaned, FORMAT) {
         return Some(ts);
     }
 
@@ -249,6 +254,7 @@ mod tests {
             ("Tue, 15 Nov 2022 20:15:04 Z", Utc.with_ymd_and_hms(2022, 11, 15, 20, 15, 4).unwrap()),
             // And RFC1123 with languages other than English...
             ("mer, 16 nov 2022 00:38:15 +0100", Utc.with_ymd_and_hms(2022, 11, 15, 23, 38, 15).unwrap()),
+            ("2016-10-01 00:00:00", Utc.with_ymd_and_hms(2016, 10, 1, 0, 0, 0).unwrap()),
         ];
 
         for (source, expected) in tests {
